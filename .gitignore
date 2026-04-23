@@ -13,4 +13,7 @@ __pycache__/
 .env
 .venv/
 
-output/
+.DS_Store
+
+# Claude
+CLAUDE.md
