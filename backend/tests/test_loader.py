@@ -25,7 +25,7 @@ class TestLoadDatasets:
         assert "users" in datasets
 
     def test_add_new_csv(self, tmp_path):
-        """Simule l'ajout d'un nouveau fichier CSV et vérifie qu'il est chargé."""
+        """Adding a new CSV file should be picked up by load_datasets."""
         (tmp_path / "initial.csv").write_text("col1,col2\n1,2\n")
 
         datasets_before, _ = load_datasets(str(tmp_path))
@@ -51,7 +51,7 @@ class TestLoadDatasets:
         assert fake_path.exists()  # Directory was created
 
     def test_special_characters_in_filename(self, tmp_path):
-        """Vérifie que les noms de fichiers sont sanitizés en noms SQL valides."""
+        """Filenames with special characters should be sanitized to valid SQL names."""
         csv_file = tmp_path / "my-data (2).csv"
         csv_file.write_text("a,b\n1,2\n")
 

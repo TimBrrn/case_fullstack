@@ -23,11 +23,7 @@ export function PlotlyChart({ data, layout }: PlotlyChartProps) {
         chartRef.current,
         data,
         { ...layout, ...PLOTLY_THEME, autosize: true },
-        {
-          responsive: true,
-          // displaylogo: false,
-          // displayModeBar: false,
-        },
+        { responsive: true },
       );
     }
     return () => {

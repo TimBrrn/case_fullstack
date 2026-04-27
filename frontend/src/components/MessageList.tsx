@@ -11,7 +11,7 @@ interface MessageListProps {
   isStreaming: boolean;
 }
 
-// Parse le résultat d'un tool call pour détecter les visualisations
+// Parse tool call result to detect visualizations
 function parseToolResult(messages: SSEEvent[], toolIndex: number, toolName: string) {
   const resultEvent = messages.find(
     (e, j) => j > toolIndex && e.type === "tool_call_result" && e.tool === toolName,
@@ -47,21 +47,21 @@ export const MessageList = ({ messages, isStreaming }: MessageListProps) => {
           activeTurnStart !== -1 &&
           blockStartIndex > activeTurnStart;
 
-        // Accumule tous les thinking consécutifs
+        // Merge consecutive thinking blocks
         let thinkingContent = event.content;
         while (i + 1 < messages.length && messages[i + 1].type === "thinking") {
           i++;
           thinkingContent += (messages[i] as { type: "thinking"; content: string }).content;
         }
 
-        // Si un tool_call_start suit, fusionne dans un seul container
+        // If followed by a tool call, group them together
         const nextEvent = messages[i + 1];
         if (nextEvent?.type === "tool_call_start") {
           i++;
           const { result, parsed } = parseToolResult(messages, i, nextEvent.tool);
 
           if (parsed?.type === "figure" || parsed?.type === "table") {
-            // Visualisation : thinking seul + graphique/tableau séparé
+            // Visualization: thinking block + chart/table rendered separately
             elements.push(
               <div key={i} className="border rounded-lg p-3">
                 <ThinkingBlock content={thinkingContent} isStreaming={blockIsStreaming} />
@@ -73,7 +73,7 @@ export const MessageList = ({ messages, isStreaming }: MessageListProps) => {
               elements.push(<DataTable key={`viz-${i}`} columns={parsed.columns} rows={parsed.rows} title={parsed.title} />);
             }
           } else {
-            // Tool call classique : thinking + tool call dans un bloc
+            // Standard tool call: thinking + tool call in one block
             elements.push(
               <div key={i} className="border rounded-lg p-3 space-y-2">
                 <ThinkingBlock content={thinkingContent} isStreaming={blockIsStreaming} />
@@ -82,7 +82,7 @@ export const MessageList = ({ messages, isStreaming }: MessageListProps) => {
             );
           }
         } else {
-          // Thinking seul
+          // Standalone thinking block
           elements.push(
             <div key={i} className="border rounded-lg p-3">
               <ThinkingBlock content={thinkingContent} isStreaming={blockIsStreaming} />
@@ -93,7 +93,7 @@ export const MessageList = ({ messages, isStreaming }: MessageListProps) => {
       }
 
       case "tool_call_start": {
-        // Tool call sans thinking avant
+        // Tool call without preceding thinking
         const { result, parsed } = parseToolResult(messages, i, event.tool);
 
         if (parsed?.type === "figure") {
@@ -113,7 +113,7 @@ export const MessageList = ({ messages, isStreaming }: MessageListProps) => {
         const blockIsStreaming =
           isStreaming && activeTurnStart !== -1 && i > activeTurnStart;
 
-        // Texte suivi d'un tool call = raisonnement intermédiaire
+        // Text followed by a tool call = intermediate reasoning
         const nextNonThinking = messages.slice(i + 1).find((e) => e.type !== "thinking");
         if (nextNonThinking?.type === "tool_call_start") {
           elements.push(
