@@ -12,10 +12,10 @@ import asyncio
 import json
 import re
 import sys
-from pathlib import Path
 
-import pandas as pd
 from dotenv import load_dotenv
+
+from agent.loader import load_datasets
 
 load_dotenv()
 
@@ -32,37 +32,6 @@ RED = "\033[31m"
 DIM = "\033[2m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
-
-
-# ---------------------------------------------------------------------------
-# Dataset loading
-# ---------------------------------------------------------------------------
-def load_datasets(data_dir: str = "data") -> tuple[dict[str, pd.DataFrame], str]:
-    """Load all CSV files from data_dir. Returns (datasets_dict, info_string)."""
-    data_path = Path(data_dir)
-    if not data_path.exists():
-        data_path.mkdir(parents=True, exist_ok=True)
-        return {}, "No datasets available."
-
-    datasets: dict[str, pd.DataFrame] = {}
-    info_lines: list[str] = []
-
-    for csv_file in sorted(data_path.glob("*.csv")):
-        # Sanitize name to be a valid SQL table name
-        name = re.sub(r"[^a-zA-Z0-9_]", "_", csv_file.stem).strip("_").lower()
-        df = pd.read_csv(csv_file)
-        datasets[name] = df
-
-        cols = ", ".join(df.columns.tolist())
-        info_lines.append(
-            f"- **{name}** ({df.shape[0]} rows, {df.shape[1]} columns)\n"
-            f"  Columns: {cols}"
-        )
-
-    if not info_lines:
-        return {}, "No datasets available. Add CSV files to the data/ directory."
-
-    return datasets, "\n".join(info_lines)
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +115,9 @@ async def main() -> None:
     print(f"\nDatasets loaded:\n")
     for name, df in datasets.items():
         cols = ", ".join(df.columns.tolist())
-        print(f"  {BOLD}{name}{RESET}  {DIM}({df.shape[0]} rows, {df.shape[1]} columns){RESET}")
+        print(
+            f"  {BOLD}{name}{RESET}  {DIM}({df.shape[0]} rows, {df.shape[1]} columns){RESET}"
+        )
         print(f"  {DIM}Columns: {cols}{RESET}\n")
 
     agent = create_agent(dataset_info)
@@ -180,7 +151,7 @@ async def main() -> None:
 
             # Display only the new messages from this run
             all_msgs = result.all_messages()
-            new_msgs = all_msgs[len(message_history):]
+            new_msgs = all_msgs[len(message_history) :]
             display_messages(new_msgs)
 
             # Display final answer

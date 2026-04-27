@@ -34,6 +34,7 @@ async def query_data(
             f"Columns: {', '.join(result_df.columns.tolist())}\n"
             f"Preview:\n{preview}"
         )
+
         return summary
 
     except Exception as e:

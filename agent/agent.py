@@ -11,11 +11,12 @@ from agent.tools.visualize import visualize
 def create_agent(dataset_info: str) -> Agent[AgentContext]:
     """Create the data analysis agent with query and visualization tools."""
     model = os.getenv("MODEL", "anthropic:claude-haiku-4-5-20251001")
+    system_prompt = get_system_prompt(dataset_info)
 
     agent: Agent[AgentContext] = Agent(
         model=model,
         deps_type=AgentContext,
-        system_prompt=get_system_prompt(dataset_info),
+        system_prompt=system_prompt,
         retries=3,
     )
 

@@ -27,6 +27,7 @@ You have 2 tools:
 3. **Query before visualize** — Always call `query_data` before `visualize`.
 4. **Be concise** — After completing the analysis, provide a brief insight. Do not recite raw data.
 5. **No imports** — `pd`, `px`, `go` are pre-loaded. Do not add import statements in your code.
+6. **No custom colors** - Do not use color_discrete_sequence or color_continuous_scale.
 
 ## Visualization Best Practices
 

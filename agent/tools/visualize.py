@@ -1,5 +1,4 @@
-import os
-import re
+import json
 from typing import Literal
 
 import pandas as pd
@@ -43,39 +42,31 @@ async def visualize(
         }
         exec(code, namespace)
 
-        safe_title = re.sub(r"[^\w\s-]", "", title).strip().replace(" ", "_").lower()
-        os.makedirs("output", exist_ok=True)
-
         if result_type == "figure":
             fig = namespace.get("fig")
             if fig is None:
                 return "Error: Code must create a 'fig' variable (plotly Figure)."
 
-            filepath = f"output/{safe_title}.html"
-            fig.write_html(filepath)
-
-            return (
-                f"Figure created: {title}\n"
-                f"Saved to: {filepath}\n"
-                f"Type: {type(fig).__name__}\n"
-                f"Traces: {len(fig.data)}"
+            return json.dumps(
+                {"type": "figure", "title": title, "figure": json.loads(fig.to_json())}
             )
 
         elif result_type == "table":
             result = namespace.get("result", df)
 
-            filepath = f"output/{safe_title}.csv"
-            result.to_csv(filepath, index=False)
-
-            return (
-                f"Table created: {title}\n"
-                f"Saved to: {filepath}\n"
-                f"Shape: {result.shape[0]} rows x {result.shape[1]} columns\n"
-                f"Preview:\n{result.head(10).to_string(index=False)}"
+            return json.dumps(
+                {
+                    "type": "table",
+                    "title": title,
+                    "columns": result.columns.tolist(),
+                    "rows": result.head(50).values.tolist(),
+                }
             )
 
         else:
-            return f"Error: Unknown result_type '{result_type}'. Use 'figure' or 'table'."
+            return (
+                f"Error: Unknown result_type '{result_type}'. Use 'figure' or 'table'."
+            )
 
     except Exception as e:
         return f"Error creating visualization: {e}"
