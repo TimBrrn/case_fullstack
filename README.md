@@ -1,113 +1,82 @@
-# Case Technique — Développeur Full Stack
+# Data Analysis Agent — Web App
 
-## Contexte
+Application web qui transforme un agent d'analyse de données CLI en interface de streaming temps réel. L'utilisateur pose des questions sur ses données et voit en direct le raisonnement de l'agent, les requêtes SQL, les visualisations Plotly et les réponses.
 
-Tu reçois un **agent d'analyse de données** qui fonctionne en mode CLI (terminal).
+## Stack
 
-L'agent peut :
+- **Backend** : FastAPI + SSE (Server-Sent Events)
+- **Frontend** : React + TypeScript + Tailwind + shadcn/ui
+- **Agent** : PydanticAI + Claude Haiku 4.5
+- **Data** : DuckDB (SQL in-memory) + pandas
+- **Visualisation** : Plotly
 
-- Répondre à des questions sur des données en générant du **SQL** (via DuckDB)
-- Créer des **visualisations** avec Plotly
-- Expliquer son **raisonnement** (balises `<thinking>`)
-- Enchaîner les étapes automatiquement via des **tool calls**
+## Installation
 
-L'agent est construit avec [PydanticAI](https://ai.pydantic.dev/).
+```bash
+# Configurer la clé API
+cp .env.example .env
+# Ajouter sa clé API Anthropic dans .env
 
----
+# Ajouter des fichiers CSV dans data/
 
-## Objectif
+# Lancer avec Docker
+docker compose up --build
 
-**Transformer cet agent CLI en une application web complète.**
+# Ou lancer en local
+pip install -r requirements.txt
+cd frontend && npm install && cd ..
 
-L'utilisateur doit pouvoir poser des questions dans une interface web et voir en temps réel :
+# Terminal 1 — backend
+uvicorn backend.app:app --reload --reload-dir backend --reload-dir agent
 
-1. Le **raisonnement** de l'agent (thinking) — affiché progressivement
-2. Les **appels d'outils** (tool calls) — nom, arguments, résultat
-3. Les **visualisations** Plotly / tableaux de données
-4. La **réponse finale** de l'agent
+# Terminal 2 — frontend
+cd frontend && npm run dev
+```
 
----
+Backend : http://localhost:8000 | Frontend : http://localhost:5173
 
-## Ce qui est fourni
+## Architecture
 
 ```
 case_fullstack/
 ├── agent/
-│   ├── agent.py              # Création de l'agent PydanticAI
-│   ├── context.py            # Contexte injecté dans les tools
-│   ├── prompt.py             # System prompt
+│   ├── agent.py              # Création de l'agent et enregistrement des tools
+│   ├── context.py            # Contexte partagé (datasets + DataFrame courant)
+│   ├── loader.py             # Chargement et sanitisation des CSV
+│   ├── prompt.py             # System prompt avec info des datasets
 │   └── tools/
 │       ├── query_data.py     # Exécution SQL via DuckDB
-│       └── visualize.py      # Création de visualisations Plotly
-├── data/                     # Fichiers CSV (tes données de test)
-├── output/                   # Visualisations générées
-├── main.py                   # Script CLI de démonstration
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-├── .env.example
-└── README.md
+│       └── visualize.py      # Génération de graphiques Plotly via exec()
+├── backend/
+│   ├── app.py                # Routes FastAPI et CORS
+│   ├── sse.py                # Streaming SSE (events PydanticAI → events SSE)
+│   └── session.py            # Historique de conversation in-memory
+├── frontend/src/
+│   ├── App.tsx               # Layout principal, page d'accueil, vue chat
+│   ├── hooks/useSSE.ts       # Consommation SSE avec fetch + getReader
+│   ├── reducer/chatReducer.ts # Gestion du state (useReducer)
+│   ├── types/                # Types TypeScript (events SSE, state, actions)
+│   └── components/           # Composants UI (MessageList, ChatInput, PlotlyChart...)
+├── data/                     # Fichiers CSV
+└── backend/tests/            # Suite pytest (24 tests)
 ```
 
----
+## Flow de données
 
-## Setup
+1. L'utilisateur envoie une question → `POST /chat`
+2. FastAPI ouvre une connexion SSE et appelle `stream()`
+3. PydanticAI envoie la question + system prompt + historique à Claude
+4. Le LLM raisonne (balises `<thinking>`), appelle `query_data` (SQL via DuckDB), puis `visualize` (graphique Plotly)
+5. `sse.py` transforme les events PydanticAI en events SSE : `thinking`, `tool_call_start`, `tool_call_result`, `text`, `done`
+6. Le frontend reçoit les events via `useSSE`, les dispatch au `chatReducer`, et rend chaque composant
 
-```bash
-# 1. Configurer la clé API
-cp .env.example .env
-# Éditer .env avec ta clé API
+## Protocole SSE
 
-# 2. Ajouter des fichiers CSV dans data/
-
-# 3. Lancer le CLI via Docker
-docker compose run --rm agent
-```
-
-> Le volume `data/` est monté dans le container — tu peux ajouter/modifier des CSV sans rebuild.
-> Les visualisations générées sont dans `output/`.
-
----
-
-## Ce qui est attendu
-
-### Minimum requis
-
-- [ ] **Backend API** avec endpoint de streaming (SSE ou WebSocket)
-- [ ] **Frontend web** avec :
-  - [ ] Champ texte pour poser des questions
-  - [ ] Affichage **streaming** du thinking (collapsible/dépliable)
-  - [ ] Affichage des **tool calls** (nom de l'outil, arguments, résultat)
-  - [ ] Rendu des **visualisations Plotly** (graphiques interactifs)
-  - [ ] Rendu des **tableaux** de données
-- [ ] **Code propre** et structuré
-
----
-
-## Stack technique
-
-- **Backend** : FastAPI 
-- **Frontend** : Libre React
-- **Streaming** : SSE ou WebSocket (à ton choix)
-
----
-
-## Critères d'évaluation
-
-| Critère | Description |
-|---------|-------------|
-| **Fonctionnalité** | Le streaming fonctionne, le thinking s'affiche en temps réel, les tool calls sont visibles, les visualisations s'affichent |
-| **Code** | Propre, structuré, lisible, bien découpé |
-| **UX** | L'expérience utilisateur est fluide et intuitive |
-| **Architecture** | Bonne séparation frontend / backend, gestion des états cohérente |
-
----
-
-## Ressources utiles
-
-- [PydanticAI — Documentation](https://ai.pydantic.dev/)
-- [PydanticAI — Streaming](https://ai.pydantic.dev/streaming/)
-- [PydanticAI — Tools](https://ai.pydantic.dev/tools/)
-- [Plotly.js — React integration](https://plotly.com/javascript/react/)
-- [FastAPI — Streaming Response](https://fastapi.tiangolo.com/advanced/custom-response/#streamingresponse)
-- [Server-Sent Events (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events)
+| Event              | Payload          | Description               |
+| ------------------ | ---------------- | ------------------------- |
+| `thinking`         | `{content}`      | Raisonnement de l'agent   |
+| `tool_call_start`  | `{tool, args}`   | Appel d'un tool           |
+| `tool_call_result` | `{tool, result}` | Résultat du tool          |
+| `text`             | `{content}`      | Réponse finale (markdown) |
+| `error`            | `{message}`      | Message d'erreur          |
+| `done`             | `{}`             | Fin du stream             |
