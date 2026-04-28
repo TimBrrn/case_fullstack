@@ -47,7 +47,7 @@ async def health():
 
 
 @app.post("/chat")
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest) -> EventSourceResponse:
     context = AgentContext(datasets=datasets, dataset_info=dataset_info)
     return EventSourceResponse(
         stream(request.question, agent, context, request.session_id)

@@ -12,15 +12,28 @@ interface MessageListProps {
 }
 
 // Parse tool call result to detect visualizations
-function parseToolResult(messages: SSEEvent[], toolIndex: number, toolName: string) {
+function parseToolResult(
+  messages: SSEEvent[],
+  toolIndex: number,
+  toolCallId: string,
+) {
   const resultEvent = messages.find(
-    (e, j) => j > toolIndex && e.type === "tool_call_result" && e.tool === toolName,
+    (e, j) =>
+      j > toolIndex &&
+      e.type === "tool_call_result" &&
+      e.tool_call_id === toolCallId,
   );
-  const result = resultEvent?.type === "tool_call_result" ? resultEvent.result : undefined;
+
+  const result =
+    resultEvent?.type === "tool_call_result" ? resultEvent.result : undefined;
 
   let parsed = null;
   if (result) {
-    try { parsed = JSON.parse(result); } catch { /* not JSON */ }
+    try {
+      parsed = JSON.parse(result);
+    } catch {
+      /* not JSON */
+    }
   }
 
   return { result, parsed };
@@ -51,33 +64,62 @@ export const MessageList = ({ messages, isStreaming }: MessageListProps) => {
         let thinkingContent = event.content;
         while (i + 1 < messages.length && messages[i + 1].type === "thinking") {
           i++;
-          thinkingContent += (messages[i] as { type: "thinking"; content: string }).content;
+          thinkingContent += (
+            messages[i] as { type: "thinking"; content: string }
+          ).content;
         }
 
         // If followed by a tool call, group them together
         const nextEvent = messages[i + 1];
         if (nextEvent?.type === "tool_call_start") {
           i++;
-          const { result, parsed } = parseToolResult(messages, i, nextEvent.tool);
+          const { result, parsed } = parseToolResult(
+            messages,
+            i,
+            nextEvent.tool_call_id,
+          );
 
           if (parsed?.type === "figure" || parsed?.type === "table") {
             // Visualization: thinking block + chart/table rendered separately
             elements.push(
               <div key={i} className="border rounded-lg p-3">
-                <ThinkingBlock content={thinkingContent} isStreaming={blockIsStreaming} />
+                <ThinkingBlock
+                  content={thinkingContent}
+                  isStreaming={blockIsStreaming}
+                />
               </div>,
             );
             if (parsed.type === "figure") {
-              elements.push(<PlotlyChart key={`viz-${i}`} data={parsed.figure.data} layout={parsed.figure.layout} />);
+              elements.push(
+                <PlotlyChart
+                  key={`viz-${i}`}
+                  data={parsed.figure.data}
+                  layout={parsed.figure.layout}
+                />,
+              );
             } else {
-              elements.push(<DataTable key={`viz-${i}`} columns={parsed.columns} rows={parsed.rows} title={parsed.title} />);
+              elements.push(
+                <DataTable
+                  key={`viz-${i}`}
+                  columns={parsed.columns}
+                  rows={parsed.rows}
+                  title={parsed.title}
+                />,
+              );
             }
           } else {
             // Standard tool call: thinking + tool call in one block
             elements.push(
               <div key={i} className="border rounded-lg p-3 space-y-2">
-                <ThinkingBlock content={thinkingContent} isStreaming={blockIsStreaming} />
-                <ToolCallBlock tool={nextEvent.tool} args={nextEvent.args} result={result} />
+                <ThinkingBlock
+                  content={thinkingContent}
+                  isStreaming={blockIsStreaming}
+                />
+                <ToolCallBlock
+                  tool={nextEvent.tool}
+                  args={nextEvent.args}
+                  result={result}
+                />
               </div>,
             );
           }
@@ -85,7 +127,10 @@ export const MessageList = ({ messages, isStreaming }: MessageListProps) => {
           // Standalone thinking block
           elements.push(
             <div key={i} className="border rounded-lg p-3">
-              <ThinkingBlock content={thinkingContent} isStreaming={blockIsStreaming} />
+              <ThinkingBlock
+                content={thinkingContent}
+                isStreaming={blockIsStreaming}
+              />
             </div>,
           );
         }
@@ -94,14 +139,38 @@ export const MessageList = ({ messages, isStreaming }: MessageListProps) => {
 
       case "tool_call_start": {
         // Tool call without preceding thinking
-        const { result, parsed } = parseToolResult(messages, i, event.tool);
+        const { result, parsed } = parseToolResult(
+          messages,
+          i,
+          event.tool_call_id,
+        );
 
         if (parsed?.type === "figure") {
-          elements.push(<PlotlyChart key={i} data={parsed.figure.data} layout={parsed.figure.layout} />);
+          elements.push(
+            <PlotlyChart
+              key={i}
+              data={parsed.figure.data}
+              layout={parsed.figure.layout}
+            />,
+          );
         } else if (parsed?.type === "table") {
-          elements.push(<DataTable key={i} columns={parsed.columns} rows={parsed.rows} title={parsed.title} />);
+          elements.push(
+            <DataTable
+              key={i}
+              columns={parsed.columns}
+              rows={parsed.rows}
+              title={parsed.title}
+            />,
+          );
         } else {
-          elements.push(<ToolCallBlock key={i} tool={event.tool} args={event.args} result={result} />);
+          elements.push(
+            <ToolCallBlock
+              key={i}
+              tool={event.tool}
+              args={event.args}
+              result={result}
+            />,
+          );
         }
         break;
       }
@@ -114,11 +183,16 @@ export const MessageList = ({ messages, isStreaming }: MessageListProps) => {
           isStreaming && activeTurnStart !== -1 && i > activeTurnStart;
 
         // Text followed by a tool call = intermediate reasoning
-        const nextNonThinking = messages.slice(i + 1).find((e) => e.type !== "thinking");
+        const nextNonThinking = messages
+          .slice(i + 1)
+          .find((e) => e.type !== "thinking");
         if (nextNonThinking?.type === "tool_call_start") {
           elements.push(
             <div key={i} className="border rounded-lg p-3">
-              <ThinkingBlock content={event.content} isStreaming={blockIsStreaming} />
+              <ThinkingBlock
+                content={event.content}
+                isStreaming={blockIsStreaming}
+              />
             </div>,
           );
         } else {

@@ -3,6 +3,8 @@ import { useCallback } from "react";
 import type { SSEEvent } from "@/types/events";
 import type { Action } from "@/types/action";
 
+const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+
 type Dispatch = React.Dispatch<Action>;
 
 function getSessionId() {
@@ -39,7 +41,7 @@ export const useSSE = (dispatch: Dispatch) => {
       dispatch({ type: "STREAM_START", payload: question });
 
       try {
-        const response = await fetch("http://localhost:8000/chat", {
+        const response = await fetch(`${API_URL}/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ question, session_id: getSessionId() }),

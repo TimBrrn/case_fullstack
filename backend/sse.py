@@ -1,8 +1,11 @@
 import json
 import re
+from typing import Any, Literal, TypedDict
+from collections.abc import AsyncIterator
 
 from pydantic_ai.messages import TextPart
 from pydantic_ai import (
+    Agent,
     AgentRunResultEvent,
     FunctionToolCallEvent,
     FunctionToolResultEvent,
@@ -12,10 +15,19 @@ from pydantic_ai import (
     TextPartDelta,
 )
 
+from agent.context import AgentContext
 from backend.session import get_history, save_history
 
 
-def parse_thinking(text: str):
+class SSEMessage(TypedDict):
+    event: str
+    data: str
+
+
+ParsedPart = tuple[Literal["thinking", "text"], str]
+
+
+def parse_thinking(text: str) -> list[ParsedPart]:
     """Separate thinking blocks from text. Returns a list of (type, content)."""
     parts = []
     pattern = re.compile(r"<thinking>(.*?)</thinking>", re.DOTALL)
@@ -37,9 +49,9 @@ def parse_thinking(text: str):
     return parts
 
 
-def flush_buffer(text_buffer: str) -> list[dict]:
+def flush_buffer(text_buffer: str) -> list[SSEMessage]:
     """Parse accumulated buffer and return SSE events."""
-    events = []
+    events: list[SSEMessage] = []
     if text_buffer:
         for event_type, content in parse_thinking(text_buffer):
             events.append(
@@ -48,7 +60,12 @@ def flush_buffer(text_buffer: str) -> list[dict]:
     return events
 
 
-async def stream(question, agent, context, session_id):
+async def stream(
+    question: str,
+    agent: Agent[AgentContext, Any],
+    context: AgentContext,
+    session_id: str,
+) -> AsyncIterator[SSEMessage]:
     history = get_history(session_id)
     text_buffer = ""
 
@@ -68,9 +85,10 @@ async def stream(question, agent, context, session_id):
 
             # Text block complete — flush buffer
             elif isinstance(event, PartEndEvent):
-                for sse_event in flush_buffer(text_buffer):
-                    yield sse_event
-                text_buffer = ""
+                if isinstance(event.part, TextPart):
+                    for sse_event in flush_buffer(text_buffer):
+                        yield sse_event
+                    text_buffer = ""
 
             # Agent calls a tool
             elif isinstance(event, FunctionToolCallEvent):
@@ -78,13 +96,16 @@ async def stream(question, agent, context, session_id):
                     yield sse_event
                 text_buffer = ""
 
-                args = event.part.args
-                if isinstance(args, str):
-                    args = json.loads(args)
+                args = event.part.args_as_dict()
+
                 yield {
                     "event": "tool_call_start",
                     "data": json.dumps(
-                        {"tool": event.part.tool_name, "args": args or {}}
+                        {
+                            "tool_call_id": event.tool_call_id,
+                            "tool": event.part.tool_name,
+                            "args": args,
+                        }
                     ),
                 }
 
@@ -94,6 +115,7 @@ async def stream(question, agent, context, session_id):
                     "event": "tool_call_result",
                     "data": json.dumps(
                         {
+                            "tool_call_id": event.tool_call_id,
                             "tool": event.result.tool_name,
                             "result": str(event.result.content),
                         }

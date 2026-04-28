@@ -6,12 +6,14 @@ type UserMessageEvent = { type: "user_message"; content: string };
 
 type ToolCallStartEvent = {
   type: "tool_call_start";
+  tool_call_id: string;
   tool: string;
   args: Record<string, unknown>;
 };
 
 type ToolCallResultEvent = {
   type: "tool_call_result";
+  tool_call_id: string;
   tool: string;
   result: string;
 };
