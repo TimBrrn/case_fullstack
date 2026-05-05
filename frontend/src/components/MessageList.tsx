@@ -1,18 +1,31 @@
 import type { SSEEvent } from "@/types/events";
 import { TextBlock } from "./TextBlock";
-import { ThinkingBlock } from "./ThinkingBlock";
-import { DataTable } from "./DataTable";
-import { PlotlyChart } from "./PlotlyChart";
-import { ToolCallBlock } from "./ToolCallBlock";
 import { UserMessage } from "./UserMessage";
+import { StandaloneThinking } from "./StandaloneThinking";
+import { ThinkingWithTool } from "./ThinkingWithTool";
+import { ThinkingWithViz, type Visualization } from "./ThinkingWithViz";
 
 interface MessageListProps {
   messages: SSEEvent[];
   isStreaming: boolean;
 }
 
-// Parse tool call result to detect visualizations
-function parseToolResult(
+// Merge consecutive thinking events into a single content string.
+function mergeAdjacentThinkings(
+  messages: SSEEvent[],
+  startIndex: number,
+): { content: string; endIndex: number } {
+  let content = (messages[startIndex] as { type: "thinking"; content: string })
+    .content;
+  let i = startIndex;
+  while (i + 1 < messages.length && messages[i + 1].type === "thinking") {
+    i++;
+    content += (messages[i] as { type: "thinking"; content: string }).content;
+  }
+  return { content, endIndex: i };
+}
+
+function findToolResult(
   messages: SSEEvent[],
   toolIndex: number,
   toolCallId: string,
@@ -27,16 +40,22 @@ function parseToolResult(
   const result =
     resultEvent?.type === "tool_call_result" ? resultEvent.result : undefined;
 
-  let parsed = null;
-  if (result) {
-    try {
-      parsed = JSON.parse(result);
-    } catch {
-      /* not JSON */
+  return result;
+}
+
+function parseVisualization(result?: string): Visualization | null {
+  if (!result) return null;
+
+  try {
+    const parsed = JSON.parse(result);
+    if (parsed?.type === "figure" || parsed?.type === "table") {
+      return parsed as Visualization;
     }
+  } catch {
+    /* not JSON */
   }
 
-  return { result, parsed };
+  return null;
 }
 
 export const MessageList = ({ messages, isStreaming }: MessageListProps) => {
@@ -54,121 +73,53 @@ export const MessageList = ({ messages, isStreaming }: MessageListProps) => {
         break;
 
       case "thinking": {
-        const blockStartIndex = i;
         const blockIsStreaming =
-          isStreaming &&
-          activeTurnStart !== -1 &&
-          blockStartIndex > activeTurnStart;
+          isStreaming && activeTurnStart !== -1 && i > activeTurnStart;
 
         // Merge consecutive thinking blocks
-        let thinkingContent = event.content;
-        while (i + 1 < messages.length && messages[i + 1].type === "thinking") {
-          i++;
-          thinkingContent += (
-            messages[i] as { type: "thinking"; content: string }
-          ).content;
-        }
+        const { content: thinkingContent, endIndex } = mergeAdjacentThinkings(
+          messages,
+          i,
+        );
+        i = endIndex;
 
-        // If followed by a tool call, group them together
         const nextEvent = messages[i + 1];
         if (nextEvent?.type === "tool_call_start") {
           i++;
-          const { result, parsed } = parseToolResult(
+          const result = findToolResult(
             messages,
             i,
             nextEvent.tool_call_id,
           );
+          const visualization = parseVisualization(result);
 
-          if (parsed?.type === "figure" || parsed?.type === "table") {
-            // Visualization: thinking block + chart/table rendered separately
+          if (visualization) {
             elements.push(
-              <div key={i} className="border rounded-lg p-3">
-                <ThinkingBlock
-                  content={thinkingContent}
-                  isStreaming={blockIsStreaming}
-                />
-              </div>,
+              <ThinkingWithViz
+                key={i}
+                thinking={thinkingContent}
+                isStreaming={blockIsStreaming}
+                viz={visualization}
+              />,
             );
-            if (parsed.type === "figure") {
-              elements.push(
-                <PlotlyChart
-                  key={`viz-${i}`}
-                  data={parsed.figure.data}
-                  layout={parsed.figure.layout}
-                />,
-              );
-            } else {
-              elements.push(
-                <DataTable
-                  key={`viz-${i}`}
-                  columns={parsed.columns}
-                  rows={parsed.rows}
-                  title={parsed.title}
-                />,
-              );
-            }
           } else {
-            // Standard tool call: thinking + tool call in one block
             elements.push(
-              <div key={i} className="border rounded-lg p-3 space-y-2">
-                <ThinkingBlock
-                  content={thinkingContent}
-                  isStreaming={blockIsStreaming}
-                />
-                <ToolCallBlock
-                  tool={nextEvent.tool}
-                  args={nextEvent.args}
-                  result={result}
-                />
-              </div>,
+              <ThinkingWithTool
+                key={i}
+                thinking={thinkingContent}
+                isStreaming={blockIsStreaming}
+                tool={nextEvent.tool}
+                args={nextEvent.args}
+                result={result}
+              />,
             );
           }
         } else {
-          // Standalone thinking block
           elements.push(
-            <div key={i} className="border rounded-lg p-3">
-              <ThinkingBlock
-                content={thinkingContent}
-                isStreaming={blockIsStreaming}
-              />
-            </div>,
-          );
-        }
-        break;
-      }
-
-      case "tool_call_start": {
-        // Tool call without preceding thinking
-        const { result, parsed } = parseToolResult(
-          messages,
-          i,
-          event.tool_call_id,
-        );
-
-        if (parsed?.type === "figure") {
-          elements.push(
-            <PlotlyChart
+            <StandaloneThinking
               key={i}
-              data={parsed.figure.data}
-              layout={parsed.figure.layout}
-            />,
-          );
-        } else if (parsed?.type === "table") {
-          elements.push(
-            <DataTable
-              key={i}
-              columns={parsed.columns}
-              rows={parsed.rows}
-              title={parsed.title}
-            />,
-          );
-        } else {
-          elements.push(
-            <ToolCallBlock
-              key={i}
-              tool={event.tool}
-              args={event.args}
-              result={result}
+              thinking={thinkingContent}
+              isStreaming={blockIsStreaming}
             />,
           );
         }
@@ -179,25 +130,7 @@ export const MessageList = ({ messages, isStreaming }: MessageListProps) => {
         break;
 
       case "text": {
-        const blockIsStreaming =
-          isStreaming && activeTurnStart !== -1 && i > activeTurnStart;
-
-        // Text followed by a tool call = intermediate reasoning
-        const nextNonThinking = messages
-          .slice(i + 1)
-          .find((e) => e.type !== "thinking");
-        if (nextNonThinking?.type === "tool_call_start") {
-          elements.push(
-            <div key={i} className="border rounded-lg p-3">
-              <ThinkingBlock
-                content={event.content}
-                isStreaming={blockIsStreaming}
-              />
-            </div>,
-          );
-        } else {
-          elements.push(<TextBlock key={i} content={event.content} />);
-        }
+        elements.push(<TextBlock key={i} content={event.content} />);
         break;
       }
 

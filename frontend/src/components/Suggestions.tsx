@@ -1,4 +1,10 @@
-import { BarChart3, Car, TrendingUp, Users, type LucideIcon } from "lucide-react";
+import {
+  BarChart3,
+  Car,
+  TrendingUp,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 
 import { Button } from "./ui/button";
 
