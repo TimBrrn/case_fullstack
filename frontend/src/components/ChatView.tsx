@@ -4,6 +4,7 @@ import type { State } from "@/types/state";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { LoadingIndicator } from "./LoadingIndicator";
+import { ErrorBanner } from "./ErrorBanner";
 
 interface ChatViewProps {
   state: State;
@@ -39,18 +40,8 @@ export function ChatView({ state, sendMessage }: ChatViewProps) {
 
         {state.status === "streaming" && <LoadingIndicator />}
 
-        {state.status === "error" && (
-          <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg mt-4">
-            <span className="text-red-500 text-sm flex-1">
-              {state.error}
-            </span>
-            <button
-              className="text-xs px-3 py-1 bg-red-100 text-red-600 rounded cursor-pointer hover:bg-red-200"
-              onClick={handleRetry}
-            >
-              Retry
-            </button>
-          </div>
+        {state.status === "error" && state.error && (
+          <ErrorBanner message={state.error} onRetry={handleRetry} />
         )}
       </div>
       <ChatInput
